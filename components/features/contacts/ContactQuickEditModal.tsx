@@ -180,9 +180,10 @@ export const ContactQuickEditModal: React.FC<ContactQuickEditModalProps> = ({
     email: '',
     custom_fields: {},
   });
+  const [formInitialized, setFormInitialized] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || formInitialized) return;
     const c = contactQuery.data;
     if (!c) return;
 
@@ -191,7 +192,8 @@ export const ContactQuickEditModal: React.FC<ContactQuickEditModalProps> = ({
       email: c.email || '',
       custom_fields: (c.custom_fields || {}) as Record<string, any>,
     });
-  }, [isOpen, contactQuery.data]);
+    setFormInitialized(true);
+  }, [isOpen, contactQuery.data, formInitialized]);
 
   const focusLabel = useMemo(() => {
     if (focusTargets.length === 0) return null;

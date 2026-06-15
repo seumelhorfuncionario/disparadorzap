@@ -92,6 +92,7 @@ export function ContactQuickEditWrapper({
 
   return (
     <ContactQuickEditModal
+      key={quickEditContactId ?? 'closed'}
       isOpen={!!quickEditContactId}
       contactId={quickEditContactId}
       onSaved={handleSaved}
