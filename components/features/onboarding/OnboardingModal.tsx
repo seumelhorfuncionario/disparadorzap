@@ -259,6 +259,12 @@ export function OnboardingModal({ isConnected, onSaveCredentials, onMarkComplete
         return (
           <WelcomeStep
             onSelectPath={(path) => startOnboarding(path)}
+            onEmbeddedSuccess={async () => {
+              // Embedded Signup já salvou as credenciais no backend.
+              // Aqui só marcamos o onboarding como completo no banco → modal fecha.
+              await onMarkComplete();
+              completeOnboarding();
+            }}
           />
         );
 
