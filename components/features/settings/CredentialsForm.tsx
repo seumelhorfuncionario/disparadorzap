@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Container } from '@/components/ui/container'
 import { SectionHeader } from '@/components/ui/section-header'
 import { WhatsAppCredentialsForm, type WhatsAppCredentials } from '@/components/shared/WhatsAppCredentialsForm'
+import { EmbeddedSignupButton } from './EmbeddedSignupButton'
 import { settingsService } from '@/services/settingsService'
 import type { AppSettings } from '../../../types'
 import type { MetaAppInfo } from './types'
@@ -19,6 +20,7 @@ interface CredentialsFormProps {
   isTestingConnection?: boolean
   metaApp?: MetaAppInfo | null
   refreshMetaApp?: () => void
+  onEmbeddedSignupSuccess?: () => void
 }
 
 /**
@@ -41,6 +43,7 @@ export const CredentialsForm = forwardRef<HTMLDivElement, CredentialsFormProps>(
       isTestingConnection,
       metaApp,
       refreshMetaApp,
+      onEmbeddedSignupSuccess,
     },
     ref
   ) => {
@@ -127,24 +130,37 @@ export const CredentialsForm = forwardRef<HTMLDivElement, CredentialsFormProps>(
         >
           <SectionHeader title="Configuração da API" color="brand" showIndicator={true} />
 
-          <div className="mt-6">
-            <WhatsAppCredentialsForm
-              values={credentialsValues}
-              onChange={handleChange}
-              onSave={handleSave}
-              showMetaApp={true}
-              showAppSecret={true}
-              hasAppSecretSaved={metaApp?.hasAppSecret ?? false}
-              showValidateButton={true}
-              showSaveButton={true}
-              showTestButton={true}
-              showHelpLink={true}
-              saveButtonText="Salvar Config"
-              isSaving={isSaving || localIsSaving}
-              isTesting={isTestingConnection}
-              variant="default"
-            />
+          {/* Embedded Signup — conecta via fluxo oficial Meta sem digitar tokens */}
+          <div className="mt-5 p-4 rounded-xl bg-white/5 border border-white/10">
+            <p className="text-sm font-medium text-white mb-1">Conectar via Meta (recomendado)</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Autorize o SmartZap a usar sua conta WhatsApp Business sem precisar copiar tokens manualmente.
+            </p>
+            <EmbeddedSignupButton onSuccess={onEmbeddedSignupSuccess} />
           </div>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-xs text-gray-500">ou configure manualmente</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+
+          <WhatsAppCredentialsForm
+            values={credentialsValues}
+            onChange={handleChange}
+            onSave={handleSave}
+            showMetaApp={true}
+            showAppSecret={true}
+            hasAppSecretSaved={metaApp?.hasAppSecret ?? false}
+            showValidateButton={true}
+            showSaveButton={true}
+            showTestButton={true}
+            showHelpLink={true}
+            saveButtonText="Salvar Config"
+            isSaving={isSaving || localIsSaving}
+            isTesting={isTestingConnection}
+            variant="default"
+          />
         </Container>
       </div>
     )
