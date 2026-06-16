@@ -21,15 +21,20 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
     if (typeof window === 'undefined') return resolve()
     if ((window as any).FB) return resolve()
 
+    ;(window as any).fbAsyncInit = () => {
+      ;(window as any).FB.init({
+        appId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version,
+      })
+      resolve()
+    }
+
     const existing = document.getElementById('fb-sdk')
     if (existing) {
       existing.addEventListener('load', () => resolve())
       return
-    }
-
-    ;(window as any).fbAsyncInit = () => {
-      ;(window as any).FB.init({ appId, version, cookie: true, xfbml: false })
-      resolve()
     }
 
     const script = document.createElement('script')
@@ -37,6 +42,7 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
     script.src = FB_SDK_URL
     script.async = true
     script.defer = true
+    script.crossOrigin = 'anonymous'
     document.head.appendChild(script)
   })
 }
@@ -44,19 +50,19 @@ function loadFbSdk(appId: string, version: string): Promise<void> {
 export function EmbeddedSignupButton({ onSuccess }: EmbeddedSignupButtonProps) {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<'idle' | 'loading' | 'exchanging' | 'done' | 'error'>('idle')
-  const sessionDataRef = useRef<{ waba_id: string; phone_number_id: string } | null>(null)
+  // waba_id chega pelo postMessage; code chega pelo callback do FB.login.
+  const wabaIdRef = useRef<string>('')
 
-  // Captura a mensagem de session info enviada pela Meta durante o fluxo
+  // Captura a session info enviada pela Meta durante o fluxo (postMessage).
+  // O phone_id NÃO vem aqui — ele é recuperado no backend via Graph API.
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.facebook.com') return
+      // A Meta posta de múltiplos subdomínios (www / web). Aceitar qualquer *.facebook.com.
+      if (!event.origin.endsWith('facebook.com')) return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
-          sessionDataRef.current = {
-            waba_id: data.data?.waba_id ?? '',
-            phone_number_id: data.data?.phone_number_id ?? '',
-          }
+        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.data?.waba_id) {
+          wabaIdRef.current = data.data.waba_id
         }
       } catch {
         // mensagem não-JSON — ignorar
@@ -67,9 +73,63 @@ export function EmbeddedSignupButton({ onSuccess }: EmbeddedSignupButtonProps) {
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
+  const exchangeAndSave = useCallback(
+    async (code: string) => {
+      // O postMessage com waba_id pode chegar ligeiramente antes ou depois do callback.
+      // Aguardamos até 3s para ter o waba_id.
+      let wabaId = wabaIdRef.current
+      if (!wabaId) {
+        await new Promise<void>((resolve) => {
+          const deadline = Date.now() + 3000
+          const poll = setInterval(() => {
+            if (wabaIdRef.current || Date.now() > deadline) {
+              clearInterval(poll)
+              resolve()
+            }
+          }, 100)
+        })
+        wabaId = wabaIdRef.current
+      }
+
+      if (!wabaId) {
+        toast.error('Não foi possível obter a conta do WhatsApp Business da Meta. Tente novamente.')
+        setStatus('error')
+        return
+      }
+
+      setStatus('exchanging')
+
+      try {
+        const res = await fetch('/api/settings/embedded-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, waba_id: wabaId }),
+        })
+
+        const json = await res.json()
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Falha ao salvar credenciais')
+        }
+
+        setStatus('done')
+        toast.success('WhatsApp conectado com sucesso!')
+        // Refresca as settings na UI sem reload de página
+        queryClient.invalidateQueries({ queryKey: ['allSettings'] })
+        queryClient.invalidateQueries({ queryKey: ['settings'] })
+        queryClient.invalidateQueries({ queryKey: ['healthStatus'] })
+        onSuccess?.({ wabaId, phoneNumberId: json.phone_number_id ?? '' })
+      } catch (err: any) {
+        toast.error(err?.message || 'Erro ao salvar credenciais')
+        setStatus('error')
+      }
+    },
+    [onSuccess, queryClient]
+  )
+
   const handleClick = useCallback(async () => {
     setStatus('loading')
-    sessionDataRef.current = null
+    wabaIdRef.current = ''
 
     try {
       await loadFbSdk(APP_ID, APP_VERSION)
@@ -87,61 +147,9 @@ export function EmbeddedSignupButton({ onSuccess }: EmbeddedSignupButtonProps) {
     }
 
     FB.login(
-      async (response: any) => {
+      (response: any) => {
         if (response.authResponse?.code) {
-          const code: string = response.authResponse.code
-
-          // A mensagem postMessage pode chegar ligeiramente antes ou depois do callback.
-          // Aguardamos até 2 s para ter o sessionData.
-          let session = sessionDataRef.current
-          if (!session?.waba_id) {
-            await new Promise<void>((resolve) => {
-              const deadline = Date.now() + 2000
-              const poll = setInterval(() => {
-                if (sessionDataRef.current?.waba_id || Date.now() > deadline) {
-                  clearInterval(poll)
-                  resolve()
-                }
-              }, 100)
-            })
-            session = sessionDataRef.current
-          }
-
-          if (!session?.waba_id || !session?.phone_number_id) {
-            toast.error('Não foi possível obter o número de telefone da Meta. Tente novamente.')
-            setStatus('error')
-            return
-          }
-
-          setStatus('exchanging')
-
-          try {
-            const res = await fetch('/api/settings/embedded-signup', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code,
-                waba_id: session.waba_id,
-                phone_number_id: session.phone_number_id,
-              }),
-            })
-
-            const json = await res.json()
-
-            if (!res.ok || !json.success) {
-              throw new Error(json.error || 'Falha ao salvar credenciais')
-            }
-
-            setStatus('done')
-            toast.success('WhatsApp conectado com sucesso via Embedded Signup!')
-            // Refresca as settings na UI sem reload de página
-            queryClient.invalidateQueries({ queryKey: ['allSettings'] })
-            queryClient.invalidateQueries({ queryKey: ['settings'] })
-            onSuccess?.({ wabaId: session.waba_id, phoneNumberId: session.phone_number_id })
-          } catch (err: any) {
-            toast.error(err?.message || 'Erro ao salvar credenciais')
-            setStatus('error')
-          }
+          void exchangeAndSave(response.authResponse.code)
         } else {
           // Usuário fechou ou cancelou o fluxo
           setStatus('idle')
@@ -152,13 +160,13 @@ export function EmbeddedSignupButton({ onSuccess }: EmbeddedSignupButtonProps) {
         response_type: 'code',
         override_default_response_type: true,
         extras: {
+          version: 'v3',
           setup: {},
-          featureType: '',
-          sessionInfoVersion: '2',
+          featureType: 'whatsapp_business_app_onboarding',
         },
       }
     )
-  }, [onSuccess])
+  }, [exchangeAndSave])
 
   const isPending = status === 'loading' || status === 'exchanging'
   const label =
