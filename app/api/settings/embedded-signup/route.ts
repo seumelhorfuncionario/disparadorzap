@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { settingsDb } from '@/lib/supabase-db'
+import { requireSessionOrApiKey } from '@/lib/request-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,10 @@ const GRAPH_BASE = `https://graph.facebook.com/${APP_VERSION}`
 // Troca o code OAuth pelo access_token usando o APP_SECRET (nunca sai do servidor).
 // O frontend envia apenas: code, waba_id, phone_number_id — sem tocar no secret.
 export async function POST(request: NextRequest) {
+  // Exige session do dashboard ou API key válida — endpoint é destrutivo (sobrescreve credenciais)
+  const authError = await requireSessionOrApiKey(request)
+  if (authError) return authError
+
   const appSecret = process.env.META_EMBEDDED_SIGNUP_SECRET
   if (!appSecret) {
     return NextResponse.json(
