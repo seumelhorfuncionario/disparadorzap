@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Falha ao trocar o código pelo token',
-        details: tokenJson?.error?.message || JSON.stringify(tokenJson),
+        details: tokenJson?.error?.message ?? 'Erro desconhecido na troca de token',
       },
       { status: 400 }
     )
@@ -67,9 +67,10 @@ export async function POST(request: NextRequest) {
   // 2. Recuperar o phone_id da WABA via Graph API
   let phoneNumberId = ''
   try {
-    const phoneRes = await fetch(
-      `${GRAPH_BASE}/${waba_id}/phone_numbers?fields=id&access_token=${accessToken}`
-    )
+    // Token via header Authorization (nunca na query string — evita vazamento em logs/proxies)
+    const phoneRes = await fetch(`${GRAPH_BASE}/${waba_id}/phone_numbers?fields=id`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
     const phoneJson = await phoneRes.json()
 
     if (!phoneRes.ok) {
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Falha ao recuperar o número de telefone da conta',
-          details: phoneJson?.error?.message || JSON.stringify(phoneJson),
+          details: phoneJson?.error?.message ?? 'Erro desconhecido na Graph API',
         },
         { status: 400 }
       )

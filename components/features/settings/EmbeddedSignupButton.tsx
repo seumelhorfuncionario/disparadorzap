@@ -57,8 +57,19 @@ export function EmbeddedSignupButton({ onSuccess }: EmbeddedSignupButtonProps) {
   // O phone_id NÃO vem aqui — ele é recuperado no backend via Graph API.
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // A Meta posta de múltiplos subdomínios (www / web). Aceitar qualquer *.facebook.com.
-      if (!event.origin.endsWith('facebook.com')) return
+      // A Meta posta de múltiplos subdomínios (www / web / business).
+      // Validar host com boundary de ponto + HTTPS — endsWith('facebook.com')
+      // sozinho seria burlável por domínios tipo "evilfacebook.com".
+      let origin: URL
+      try {
+        origin = new URL(event.origin)
+      } catch {
+        return
+      }
+      const isMetaOrigin =
+        origin.protocol === 'https:' &&
+        (origin.hostname === 'facebook.com' || origin.hostname.endsWith('.facebook.com'))
+      if (!isMetaOrigin) return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.data?.waba_id) {
