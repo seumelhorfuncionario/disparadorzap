@@ -64,7 +64,7 @@ export function QStashForm({ data, onComplete, onBack, showBack }: FormProps) {
         await new Promise(r => setTimeout(r, MIN_VALIDATION_TIME - elapsed));
       }
       setError(err instanceof Error ? err.message : 'Falha na conexão');
-      setToken('');
+      // Não limpar o token — usuário precisa ver/corrigir o que digitou
     } finally {
       setValidating(false);
     }

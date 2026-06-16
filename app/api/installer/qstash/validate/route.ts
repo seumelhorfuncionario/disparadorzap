@@ -18,9 +18,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validar token fazendo uma requisição de listagem de schedules
-    // Endpoint US-East-1 (região obrigatória — outras regiões não são compatíveis)
-    const qstashRes = await fetch('https://qstash-us-east-1.upstash.io/v2/schedules', {
+    // Validar token via management API (URL global — independente da região de publicação)
+    const qstashRes = await fetch('https://qstash.upstash.io/v2/schedules', {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (!qstashRes.ok) {
       if (qstashRes.status === 401 || qstashRes.status === 403) {
         return NextResponse.json(
-          { error: 'Token QStash inválido. Verifique se criou o QStash na região US-East-1 no Upstash.' },
+          { error: 'Token QStash inválido. Verifique se copiou o QSTASH_TOKEN correto no painel do Upstash.' },
           { status: 401 }
         );
       }
